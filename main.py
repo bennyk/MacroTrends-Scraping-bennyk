@@ -53,22 +53,6 @@ def current_URL(url_path):
     return current_url
 
 
-def write_excel(data_dict):
-    df = pd.DataFrame(data_dict)
-    df = df.replace('-', 0)
-    df = df.sort_values(by='Years', ascending=True)
-    wb = Workbook()
-    ws = wb.active
-
-    # Add the column headers
-    for row in dataframe_to_rows(df, index=False, header=True):
-        ws.append(row)
-
-    # Save the Excel file
-    excel_file = 'revenue_and_profit.xlsx'
-    wb.save(excel_file)
-
-
 def parse_grid(driver, fin_url):
     driver.get(fin_url)
     driver.set_window_size(2000, 2000)
@@ -104,6 +88,30 @@ def parse_content(driver, col_grid):
     return data_dict
 
 
+class Clipboard:
+    def __init__(self):
+        self.wb = Workbook()
+        self.excel_file = 'revenue_and_profit.xlsx'
+
+        # removing initial sheet
+        ws = self.wb.active
+        self.wb.remove(ws)
+
+    def write_excel(self, title, data_dict):
+        df = pd.DataFrame(data_dict)
+        df = df.replace('-', 0)
+        df = df.sort_values(by='Years', ascending=True)
+        ws = self.wb.create_sheet(title)
+
+        # Add the column headers
+        for row in dataframe_to_rows(df, index=False, header=True):
+            ws.append(row)
+
+    def save(self):
+        # Save the Excel file
+        self.wb.save(self.excel_file)
+
+
 def run_main():
     main_url_path = 'https://www.macrotrends.net/'
     current_url = current_URL(main_url_path)
@@ -119,10 +127,23 @@ def run_main():
         if driver.find_elements(
                 By.CSS_SELECTOR,
                 "div.jqx-grid-column-header:nth-child(1) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)"):
+
+            clip = Clipboard()
+
             income_url = url_path+"income-statement"
             data_dict = parse_grid(driver, income_url)
+            clip.write_excel('Income', data_dict)
+
+            balance_url = url_path+"balance-sheet"
+            data_dict = parse_grid(driver, balance_url)
+            clip.write_excel('Balance', data_dict)
+
+            cash_url = url_path+"cash-flow-statement"
+            data_dict = parse_grid(driver, cash_url)
+            clip.write_excel('Cash', data_dict)
+
+            clip.save()
             driver.quit()
-            write_excel(data_dict)
 
 
 run_main()
