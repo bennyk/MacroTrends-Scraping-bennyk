@@ -105,9 +105,10 @@ def extract():
                     assert val is not None
                 arr.append(val)
 
-            else:
-                # popup_icon
+            elif period.group(1) == 'popup_icon':
                 pass
+            else:
+                assert False
         # print(od)
 
         # Convert od to DataFrame
