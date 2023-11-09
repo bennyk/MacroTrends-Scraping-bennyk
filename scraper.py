@@ -9,7 +9,8 @@ import time
 # Inspired by https://github.com/capuccino26/MacroTrends-Scraping
 # DataFrame https://www.geeksforgeeks.org/python-pandas-dataframe/
 # https://regex101.com/
-# https://www.debuggex.com/
+# https://www.debuggex.com/cheatsheet/regex/python
+# https://pythex.org/
 
 
 def extract(orig_data):
