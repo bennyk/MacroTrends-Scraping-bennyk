@@ -3,8 +3,10 @@ from collections import OrderedDict
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from common import curly_brace, current_URL, get_options, get_driver, Clipboard
+from common import column_to_letter, curly_brace, current_URL, get_options, get_driver, Clipboard
 import time
+from openpyxl import Workbook, worksheet
+from openpyxl.chart import LineChart, Reference
 
 # Inspired by https://github.com/capuccino26/MacroTrends-Scraping
 # DataFrame https://www.geeksforgeeks.org/python-pandas-dataframe/
@@ -36,7 +38,7 @@ def extract(orig_data):
 
         for s in curly_brace(m.group(1)):
             period = []
-            for p in re.finditer(r'"((?:[^"\\]|\\.)*)"|([.\d]+)', s):
+            for p in re.finditer(r'"((?:[^"\\]|\\.)*)"|([.\-\d]+)', s):
                 period.append(p)
                 if len(period) == 2:
                     # Match the pattern [field_name][<a href='...>][date1][value1][date2][value2]...
@@ -92,6 +94,7 @@ def extract(orig_data):
                 #     print("Matched", f)
 
         df = pd.DataFrame(od)
+        df = df.sort_values('Years')
         # print(df)
         return df
 
@@ -107,6 +110,70 @@ def get_page(driver: webdriver, fin_url):
             df = extract(line)
             return df
     return None
+
+
+def insert_newsheet(clip: Clipboard):
+    new_sheetname = 'newSheet'
+
+    # type: Workbook
+    wb = clip.wb
+
+    # type: worksheet
+    ws = wb.create_sheet(new_sheetname)
+    new_sheet_index = len(wb.sheetnames)-1
+    wb.active = new_sheet_index
+    # ws = self.wb.active  # type: worksheet
+
+    # Iterate to ~60 rows
+    # len 58
+    for i in range(1, 60):
+        # TODO Tuple error: self[key].value = value
+        # AttributeError: 'tuple' object has no attribute 'value'
+        # ws['A{index}:B{index}'.format(index=i)] = '=Income!A{index}:B{index}'.format(index=i)
+        ws.cell(column=1, row=i, value='=Income!{letter}{index}'.format(index=i, letter=column_to_letter(1)))
+
+    # Column tuple for reference, new index, and text ref in Excel.
+    col_tuples = [{'ref': 2, 'idx': 2, 'text': '', 'table': 'Income'},
+                  {'ref': 4, 'idx': 4, 'text': 'Gross', 'table': 'Income'},
+                  {'ref': 9, 'idx': 6, 'text': 'Operating', 'table': 'Income'},
+                  {'ref': 17, 'idx': 8, 'text': 'Net', 'table': 'Income'}, ]
+    for t in col_tuples:
+        for i in range(1, 60):
+            ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
+                    .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
+
+    rev_col = 2
+    ws.cell(column=rev_col+1, row=1, value='Revenue growth %')
+    for i in range(1, 60):
+        if (i-4) > 1:
+            ws.cell(column=rev_col+1, row=i, value='=({letter}{index}-{letter}{index2})/{letter}{index2}'
+                    .format(index=i, index2=i-4, letter=column_to_letter(rev_col)))
+            ws['{letter}{index}'.format(index=i, letter=column_to_letter(rev_col+1))].number_format = '0.00%'
+
+    for t in col_tuples:
+        if t['text'] != '':
+            ws.cell(column=t['idx']+1, row=1, value='{} margin %'.format(t['text']))
+            for i in range(2, 60):
+                ws.cell(column=t['idx']+1, row=i,
+                        value='={letter1}{index}/{letter2}{index}'
+                        # TODO Fixed the reference to column B
+                        .format(index=i, letter1=column_to_letter(t['idx']), letter2='B'))  # B - Revenue col
+                ws['{letter}{index}'.format(index=i, letter=column_to_letter(t['idx']+1))].number_format = '0.00%'
+
+    # Graph data
+    chart = LineChart()
+    letter = column_to_letter(rev_col+1)
+    data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+    chart.add_data(data, titles_from_data=True)
+    for t in col_tuples:
+        if t['text'] != '':
+            letter = column_to_letter(t['idx']+1)
+            data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+            chart.add_data(data, titles_from_data=True)
+
+    category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
+    chart.set_categories(category)
+    ws.add_chart(chart, 'D3')
 
 
 def run_main():
@@ -129,19 +196,17 @@ def run_main():
 
             income_url = url_path+"income-statement?freq=Q"
             df = get_page(driver, income_url)
-            print(df)
             clip.write_excel('Income', df)
 
             balance_url = url_path+"balance-sheet?freq=Q"
             df = get_page(driver, balance_url)
-            print(df)
             clip.write_excel('Balance', df)
 
             cash_url = url_path+"cash-flow-statement?freq=Q"
             df = get_page(driver, cash_url)
-            print(df)
             clip.write_excel('Cash', df)
 
+            insert_newsheet(clip)
             clip.save()
             driver.quit()
 
