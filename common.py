@@ -196,3 +196,22 @@ def old_run_main():
             driver.quit()
 
 
+def column_to_letter(column_int):
+    # https://stackoverflow.com/questions/23861680/convert-spreadsheet-number-to-column-letter
+    start_index = 1   # It can start either at 0 or at 1
+    letter = ''
+    while column_int > 25 + start_index:
+        letter += chr(65 + int((column_int-start_index)/26) - 1)
+        column_int = column_int - (int((column_int-start_index)/26))*26
+    letter += chr(65 - start_index + (int(column_int)))
+    return letter
+
+
+def letter_to_column(name):
+    # https://cwestblog.com/2013/09/13/python-convert-excel-column-name-to-number/
+    pow = 1
+    column_int = 0
+    for letter in name[::-1]:
+            column_int += (int(letter, 36) -9) * pow
+            pow *= 26
+    return column_int
