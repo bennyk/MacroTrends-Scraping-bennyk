@@ -133,15 +133,21 @@ def insert_newsheet(clip: Clipboard):
         ws.cell(column=1, row=i, value='=Income!{letter}{index}'.format(index=i, letter=column_to_letter(1)))
 
     # Column tuple for reference, new index, and text ref in Excel.
+    # TODO Industry specific ration CFO / Capex
+    # https://www.investopedia.com/terms/c/capitalexpenditure.asp
     col_tuples = [{'ref': 2, 'idx': 2, 'text': '', 'table': 'Income'},
                   {'ref': 4, 'idx': 4, 'text': 'Gross', 'table': 'Income'},
                   {'ref': 9, 'idx': 6, 'text': 'Operating', 'table': 'Income'},
-                  {'ref': 17, 'idx': 8, 'text': 'Net', 'table': 'Income'}, ]
+                  {'ref': 17, 'idx': 8, 'text': 'Net', 'table': 'Income'},
+                  {'ref': 11, 'idx': 10, 'text': 'OCF', 'table': 'Cash'},
+                  {'ref': 12, 'idx': 12, 'text': 'Capex', 'table': 'Cash'},
+                  ]
     for t in col_tuples:
         for i in range(1, 60):
             ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
                     .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
 
+    # TODO hard code to rev_col
     rev_col = 2
     ws.cell(column=rev_col+1, row=1, value='Revenue growth %')
     for i in range(1, 60):
@@ -149,6 +155,19 @@ def insert_newsheet(clip: Clipboard):
             ws.cell(column=rev_col+1, row=i, value='=({letter}{index}-{letter}{index2})/{letter}{index2}'
                     .format(index=i, index2=i-4, letter=column_to_letter(rev_col)))
             ws['{letter}{index}'.format(index=i, letter=column_to_letter(rev_col+1))].number_format = '0.00%'
+
+    # TODO Free cash burn
+    fcf_col = 14    # Allocate N for free cash flow
+    ocf_letter = 'J'    # OCF
+    net_ppe_letter = 'L'    # Net PPE
+    fcf_margin_col = 15    # Allocate N for free cash flow
+    ws.cell(column=fcf_col, row=1, value='FCF')
+    ws.cell(column=fcf_margin_col, row=1, value='FCF margin %')
+    for i in range(2, 60):
+        ws.cell(column=fcf_col, row=i, value='={ocf_letter}{index}+{net_ppe_letter}{index}'
+                .format(ocf_letter=ocf_letter, net_ppe_letter=net_ppe_letter, index=i))
+        ws.cell(column=fcf_col+1, row=i, value='={fcf_letter}{index}/B{index}'
+                .format(fcf_letter=column_to_letter(fcf_col), index=i))
 
     for t in col_tuples:
         if t['text'] != '':
@@ -170,6 +189,10 @@ def insert_newsheet(clip: Clipboard):
             letter = column_to_letter(t['idx']+1)
             data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
             chart.add_data(data, titles_from_data=True)
+
+    letter = column_to_letter(fcf_margin_col)
+    data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+    chart.add_data(data, titles_from_data=True)
 
     category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
     chart.set_categories(category)
