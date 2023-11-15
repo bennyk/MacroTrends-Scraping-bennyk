@@ -7,6 +7,7 @@ from common import column_to_letter, curly_brace, current_URL, get_options, get_
 import time
 from openpyxl import Workbook, worksheet
 from openpyxl.chart import LineChart, Reference
+from openpyxl.styles import Font, Alignment
 
 # Inspired by https://github.com/capuccino26/MacroTrends-Scraping
 # DataFrame https://www.geeksforgeeks.org/python-pandas-dataframe/
@@ -112,7 +113,7 @@ def get_page(driver: webdriver, fin_url):
     return None
 
 
-def insert_newsheet(clip: Clipboard):
+def income_insert_newsheet(clip: Clipboard):
     new_sheetname = 'newSheet'
 
     # type: Workbook
@@ -206,6 +207,98 @@ def insert_newsheet(clip: Clipboard):
     ws.add_chart(chart, 'D3')
 
 
+def debt_insert_newsheet(clip: Clipboard):
+    new_sheetname = 'Debt'
+
+    # type: Workbook
+    wb = clip.wb
+
+    # type: worksheet
+    ws = wb.create_sheet(new_sheetname)
+    new_sheet_index = len(wb.sheetnames)-1
+    wb.active = new_sheet_index
+
+    # Iterate to ~60 rows
+    # len 58
+    for i in range(1, 60):
+        ws.cell(column=1, row=i, value='=Balance!{letter}{index}'.format(index=i, letter=column_to_letter(1)))
+
+    col_tuples = [
+        # Cash
+        {'ref': 2, 'idx': 2, 'text': 'LT asset', 'table': 'Balance'},
+        # LT assets
+        {'ref': 12, 'idx': 3, 'text': 'LT asset', 'table': 'Balance'},
+        # ST debt
+        {'ref': 14, 'idx': 4, 'text': 'LT debt', 'table': 'Balance'},
+        # LT debt
+        {'ref': 17, 'idx': 5, 'text': 'LT debt', 'table': 'Balance'},
+        # Shareholder equity
+        {'ref': 23, 'idx': 6, 'text': 'Equity', 'table': 'Balance'},
+    ]
+
+    for t in col_tuples:
+        for i in range(1, 60):
+            ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
+                    .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
+
+    lt_assets_col = 3
+    lt_liabilities_col = 5
+    lt_liabilities_to_assets_col = 7
+    ws.cell(column=lt_liabilities_to_assets_col, row=1, value='Long term liabilities to assets')
+    for i in range(2, 60):
+        ws.cell(column=lt_liabilities_to_assets_col, row=i, value='=${lt_liabilities}{index}/${lt_assets}{index}'
+                .format(index=i,
+                        lt_liabilities=column_to_letter(lt_liabilities_col),
+                        lt_assets=column_to_letter(lt_assets_col)))
+        ws['{}{}'.format(column_to_letter(lt_liabilities_to_assets_col), i)].number_format = '0%'
+
+    cash_col = 2
+    total_current_liab_col = 4
+    total_lt_liab_col = 5
+    equity_col = 6
+    net_debt_to_equity_col = 8
+    ws.cell(column=net_debt_to_equity_col, row=1, value='Net debt to equity')
+    for i in range(2, 60):
+        ws.cell(column=net_debt_to_equity_col, row=i,
+                value='=(${total_lt_liab}{index}+${total_current_liab}{index}-${cash}{index})/${equity}{index}'
+                .format(index=i,
+                        cash=column_to_letter(cash_col),
+                        total_current_liab=column_to_letter(total_current_liab_col),
+                        total_lt_liab=column_to_letter(total_lt_liab_col),
+                        equity=column_to_letter(equity_col), ))
+        ws['{}{}'.format(column_to_letter(net_debt_to_equity_col), i)].number_format = '0%'
+
+    cash_to_short_term_col = 9
+    ws.cell(column=cash_to_short_term_col, row=1, value='Cash to short-term borrowing')
+    for i in range(2, 60):
+        ws.cell(column=cash_to_short_term_col, row=i,
+                value='=${cash}{index}/${total_current_liab}{index}'
+                .format(index=i,
+                        cash=column_to_letter(cash_col),
+                        total_current_liab=column_to_letter(total_current_liab_col), ))
+        ws['{}{}'.format(column_to_letter(cash_to_short_term_col), i)].number_format = '0.00'
+
+    for j in range(1, cash_to_short_term_col+1):
+        ws.column_dimensions[column_to_letter(j)].width = 10
+        ws.cell(column=j, row=1).alignment = Alignment(wrapText=True)
+
+        # TODO This stack doesn't work yet
+        # https://stackoverflow.com/questions/25588918/how-to-freeze-entire-header-row-in-openpyxl
+        # print('{}1'.format(column_to_letter(j)))
+        # ws.freeze_panes = '{}1'.format(column_to_letter(j))
+
+    # Graph data
+    chart = LineChart()
+    for i in range(lt_liabilities_to_assets_col, cash_to_short_term_col+1):
+        letter = column_to_letter(i)
+        data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+        chart.add_data(data, titles_from_data=True)
+
+    category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
+    chart.set_categories(category)
+    ws.add_chart(chart, 'D3')
+
+
 def run_main():
     main_url_path = 'https://www.macrotrends.net/'
     current_url = current_URL(main_url_path)
@@ -236,7 +329,8 @@ def run_main():
             df = get_page(driver, cash_url)
             clip.write_excel('Cash', df)
 
-            insert_newsheet(clip)
+            income_insert_newsheet(clip)
+            debt_insert_newsheet(clip)
             clip.save()
             driver.quit()
 
