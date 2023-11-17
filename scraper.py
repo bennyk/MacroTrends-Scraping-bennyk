@@ -299,6 +299,115 @@ def debt_insert_newsheet(clip: Clipboard):
     ws.add_chart(chart, 'D3')
 
 
+def returns_insert_newsheet(clip: Clipboard):
+    new_sheetname = 'Return'
+
+    # type: Workbook
+    wb = clip.wb
+
+    # type: worksheet
+    ws = wb.create_sheet(new_sheetname)
+    new_sheet_index = len(wb.sheetnames)-1
+    wb.active = new_sheet_index
+
+    # Iterate to ~60 rows
+    # len 58
+    for i in range(1, 60):
+        ws.cell(column=1, row=i, value='=Balance!{letter}{index}'
+                .format(index=i, letter=column_to_letter(1)))
+
+    # TODO Chain these sheets in sequential order.
+    op_income_col = 2
+    tax_col = op_income_col+1
+    net_income_col = tax_col+1
+    asset_col = net_income_col+1
+    debt_col = asset_col+1
+    equity_col = debt_col+1
+    cash_from_investing_col = equity_col+1
+    cash_from_financing_col = cash_from_investing_col+1
+    roe_col = cash_from_financing_col+1
+    roa_col = roe_col+1
+    roic_col = roa_col+1
+
+    col_tuples = [
+        # Op income
+        {'ref': 9, 'idx': op_income_col, 'text': 'Op income', 'table': 'Income'},
+        # Tax
+        {'ref': 12, 'idx': tax_col, 'text': 'Tax expense', 'table': 'Income'},
+        # Net income
+        {'ref': 17, 'idx': net_income_col, 'text': 'Net income', 'table': 'Income'},
+        # Assets
+        {'ref': 13, 'idx': asset_col, 'text': "Shareholders' equity", 'table': 'Balance'},
+        # Debt
+        {'ref': 15, 'idx': debt_col, 'text': "Debt", 'table': 'Balance'},
+        # Equity
+        {'ref': 23, 'idx': equity_col, 'text': "Equity", 'table': 'Balance'},
+        # Cash from investing
+        {'ref': 19, 'idx': cash_from_investing_col, 'text': "Cash from investing", 'table': 'Cash'},
+        # Cash from financing
+        {'ref': 27, 'idx': cash_from_financing_col, 'text': "Cash from financing", 'table': 'Cash'},
+    ]
+
+    for t in col_tuples:
+        for i in range(1, 60):
+            ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
+                    .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
+
+    ws.cell(column=roe_col, row=1, value='Return on Equity')
+    for i in range(5, 60):
+        ws.cell(column=roe_col, row=i,
+                value='=SUM(${net_income}{index1}:{net_income}{index2})/AVERAGE(${equity}{index1}:${equity}{index2})'
+                .format(index1=i-3,
+                        index2=i,
+                        net_income=column_to_letter(net_income_col),
+                        equity=column_to_letter(equity_col)))
+        ws['{}{}'.format(column_to_letter(roe_col), i)].number_format = '0%'
+
+    ws.cell(column=roa_col, row=1, value='Return on Asset')
+    for i in range(5, 60):
+        ws.cell(column=roa_col, row=i,
+                value='=SUM(${net_income}{index1}:{net_income}{index2})/AVERAGE(${asset}{index1}:${asset}{index2})'
+                .format(index1=i-3,
+                        index2=i,
+                        net_income=column_to_letter(net_income_col),
+                        asset=column_to_letter(asset_col)))
+        ws['{}{}'.format(column_to_letter(roa_col), i)].number_format = '0%'
+
+    ws.cell(column=roic_col, row=1, value='Return on Invested Capital')
+    for i in range(5, 60):
+        ws.cell(column=roic_col, row=i,
+                value='=(SUM(${op_income}{index1}:{op_income}{index2})'
+                      '- SUM(${tax}{index1}:{tax}{index2}))'
+                      '/ (AVERAGE(${debt}{index1}:${debt}{index2})'
+                      '+ AVERAGE(${equity}{index1}:${equity}{index2})'
+                      '+ AVERAGE(${cash_from_investing}{index1}:${cash_from_investing}{index2})'
+                      '+ AVERAGE(${cash_from_financing}{index1}:${cash_from_financing}{index2}))'
+                .format(index1=i-3,
+                        index2=i,
+                        op_income=column_to_letter(op_income_col),
+                        tax=column_to_letter(tax_col),
+                        debt=column_to_letter(debt_col),
+                        equity=column_to_letter(equity_col),
+                        cash_from_investing=column_to_letter(cash_from_investing_col),
+                        cash_from_financing=column_to_letter(cash_from_financing_col), ))
+        ws['{}{}'.format(column_to_letter(roic_col), i)].number_format = '0%'
+
+    for j in range(1, roic_col+1):
+        ws.column_dimensions[column_to_letter(j)].width = 10
+        ws.cell(column=j, row=1).alignment = Alignment(wrapText=True)
+
+    # Graph data
+    chart = LineChart()
+    for i in range(roe_col, roic_col+1):
+        letter = column_to_letter(i)
+        data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+        chart.add_data(data, titles_from_data=True)
+
+    category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
+    chart.set_categories(category)
+    ws.add_chart(chart, 'D3')
+
+
 def run_main():
     main_url_path = 'https://www.macrotrends.net/'
     current_url = current_URL(main_url_path)
@@ -331,6 +440,7 @@ def run_main():
 
             income_insert_newsheet(clip)
             debt_insert_newsheet(clip)
+            returns_insert_newsheet(clip)
             clip.save()
             driver.quit()
 
