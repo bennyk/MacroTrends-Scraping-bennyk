@@ -408,6 +408,103 @@ def returns_insert_newsheet(clip: Clipboard):
     ws.add_chart(chart, 'D3')
 
 
+def eps_insert_newsheet(clip: Clipboard):
+    new_sheetname = 'EPS'
+
+    # type: Workbook
+    wb = clip.wb
+
+    # type: worksheet
+    ws = wb.create_sheet(new_sheetname)
+    new_sheet_index = len(wb.sheetnames)-1
+    wb.active = new_sheet_index
+
+    # Iterate to ~60 rows
+    # len 58
+    for i in range(1, 60):
+        ws.cell(column=1, row=i, value='=Income!{letter}{index}'
+                .format(index=i, letter=column_to_letter(1)))
+
+    eps_col = 2
+    annual_eps_col = eps_col+1
+    col_tuples = [
+        # EPS
+        {'ref': 23, 'idx': eps_col, 'text': 'EPS', 'table': 'Income'},
+    ]
+
+    for t in col_tuples:
+        for i in range(1, 60):
+            ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
+                    .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
+
+    ws.cell(column=annual_eps_col, row=1, value='Annual EPS')
+    for i in range(5, 60):
+        ws.cell(column=annual_eps_col, row=i,
+                value='=SUM(${eps}{index1}:{eps}{index2})'
+                .format(index1=i-3,
+                        index2=i,
+                        eps=column_to_letter(eps_col), ))
+        ws['{}{}'.format(column_to_letter(annual_eps_col), i)].number_format = '0.00'
+
+    for j in range(1, annual_eps_col+1):
+        ws.column_dimensions[column_to_letter(j)].width = 10
+        ws.cell(column=j, row=1).alignment = Alignment(wrapText=True)
+
+    # Graph data
+    chart = LineChart()
+    for i in range(annual_eps_col, annual_eps_col+1):
+        letter = column_to_letter(i)
+        data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+        chart.add_data(data, titles_from_data=True)
+
+    category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
+    chart.set_categories(category)
+    ws.add_chart(chart, 'D3')
+
+
+def shares_out_insert_newsheet(clip: Clipboard):
+    new_sheetname = 'Shares'
+    # TODO Openpyxl can't deal with space in sheetname "Shares outstanding"
+    # new_sheetname = 'Shares outstanding'
+
+    # type: Workbook
+    wb = clip.wb
+
+    # type: worksheet
+    ws = wb.create_sheet(new_sheetname)
+    new_sheet_index = len(wb.sheetnames)-1
+    wb.active = new_sheet_index
+
+    # Iterate to ~60 rows
+    # len 58
+    for i in range(2, 60):
+        ws.cell(column=1, row=i, value='=Income!{letter}{index}'
+                .format(index=i, letter=column_to_letter(1)))
+
+    shares_out_col = 2
+    # _shares_out_col = shares_out_col+1
+    col_tuples = [
+        # Shares outstanding
+        {'ref': 21, 'idx': shares_out_col, 'text': 'Shares outstanding', 'table': 'Income'},
+    ]
+
+    for t in col_tuples:
+        for i in range(1, 60):
+            ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
+                    .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
+
+    # Graph data
+    chart = LineChart()
+    for i in range(shares_out_col, shares_out_col+1):
+        letter = column_to_letter(i)
+        data = Reference(ws, range_string=f'{new_sheetname}!{letter}1:{letter}60')
+        chart.add_data(data, titles_from_data=True)
+
+    category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
+    chart.set_categories(category)
+    ws.add_chart(chart, 'D3')
+
+
 def run_main():
     main_url_path = 'https://www.macrotrends.net/'
     current_url = current_URL(main_url_path)
@@ -441,6 +538,8 @@ def run_main():
             income_insert_newsheet(clip)
             debt_insert_newsheet(clip)
             returns_insert_newsheet(clip)
+            eps_insert_newsheet(clip)
+            shares_out_insert_newsheet(clip)
             clip.save()
             driver.quit()
 
