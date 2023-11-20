@@ -176,7 +176,7 @@ class Clipboard:
 
     def insert_newsheet(self, new_sheetname: str, col_tuples: List[Dict]):
         ws = self.wb.create_sheet(new_sheetname)
-        new_sheet_index = len(self.wb.sheetnames)-1
+        new_sheet_index = len(self.wb.sheetnames) - 1
         self.wb.active = new_sheet_index
 
         # Iterate to ~60 rows
@@ -185,6 +185,9 @@ class Clipboard:
             ws.cell(column=1, row=i, value='=Income!{letter}{index}'.format(index=i, letter=column_to_letter(1)))
 
         for t in col_tuples:
+            # if t['text'] != '':
+            #     if 'ignore' in t:
+            #         continue
             for i in range(1, 60):
                 ws.cell(column=t['idx'], row=i, value='={table}!{letter}{index}'
                         .format(index=i, letter=column_to_letter(t['ref']), table=t['table']))
@@ -207,6 +210,76 @@ class Clipboard:
         category = Reference(ws, range_string=f'{new_sheetname}!A2:A60')
         chart.set_categories(category)
         ws.add_chart(chart, 'D3')
+
+    def insert_income(self):
+        var = MyVar()
+        rev_col = var.gen_var()
+        gross_col = var.gen_var()
+        op_col = var.gen_var()
+        net_col = var.gen_var()
+        ocf_col = var.gen_var()
+        capex_col = var.gen_var()
+        fcf_col = var.gen_var()
+        rev_growth_col = var.gen_var()
+        gross_margin_col = var.gen_var()
+        op_margin_col = var.gen_var()
+        net_margin_col = var.gen_var()
+        ocf_margin_col = var.gen_var()
+        fcf_margin_col = var.gen_var()
+
+        # Column tuple for reference, new index, and text ref in Excel.
+        # TODO Industry specific ration CFO / Capex
+        # https://www.investopedia.com/terms/c/capitalexpenditure.asp
+        col_tuples = [{'ref': 2, 'idx': rev_col, 'text': 'Revenue', 'table': 'Income'},
+                      {'ref': 4, 'idx': gross_col, 'text': 'Gross', 'table': 'Income'},
+                      {'ref': 9, 'idx': op_col, 'text': 'Operating', 'table': 'Income'},
+                      {'ref': 17, 'idx': net_col, 'text': 'Net', 'table': 'Income'},
+                      {'ref': 11, 'idx': ocf_col, 'text': 'OCF', 'table': 'Cash'},
+                      # Ignoring flag in Net change in PPE
+                      {'ref': 12, 'idx': capex_col, 'text': 'Capex margin', 'table': 'Cash', 'ignore': True},
+                      ]
+        new_sheetname = 'Margins'
+        ws = self.insert_newsheet(new_sheetname, col_tuples)
+
+        ws.cell(column=rev_growth_col, row=1, value='Revenue growth %')
+        for i in range(1, 60):
+            if (i-4) > 1:
+                ws.cell(column=rev_growth_col, row=i, value='=({letter}{index}-{letter}{index2})/{letter}{index2}'
+                        .format(index=i, index2=i-4, letter=column_to_letter(rev_col)))
+                ws['{letter}{index}'.format(
+                    index=i, letter=column_to_letter(rev_growth_col))].number_format = '0%'
+
+        for col, margin_col, text in [
+            (gross_col, gross_margin_col, 'Gross margin'),
+            (op_col, op_margin_col, 'Op margin'),
+            (net_col, net_margin_col, 'Net margin'),
+            (ocf_col, ocf_margin_col, 'OCF margin'),
+        ]:
+            ws.cell(column=margin_col, row=1, value=text)
+            for i in range(2, 60):
+                ws.cell(column=margin_col, row=i,
+                        value='=${col}{index}/{rev}{index}'
+                        .format(index=i,
+                                rev=column_to_letter(rev_col),
+                                col=column_to_letter(col), ))
+                ws['{}{}'.format(column_to_letter(margin_col), i)].number_format = '0%'
+
+        ws.cell(column=fcf_col, row=1, value='FCF')
+        ws.cell(column=fcf_margin_col, row=1, value='FCF margin')
+        for i in range(2, 60):
+            ws.cell(column=fcf_col, row=i, value='=({ocf}{index}+{capex}{index})'
+                    .format(index=i,
+                            ocf=column_to_letter(ocf_col),
+                            capex=column_to_letter(capex_col), ))
+            ws['{}{}'.format(column_to_letter(fcf_col), i)].number_format = '0.0'
+
+            ws.cell(column=fcf_margin_col, row=i, value='={fcf}{index}/{rev}{index}'
+                    .format(index=i,
+                            fcf=column_to_letter(fcf_col),
+                            rev=column_to_letter(rev_col), ))
+            ws['{}{}'.format(column_to_letter(fcf_margin_col), i)].number_format = '0%'
+
+        self.insert_chart(ws, rev_growth_col, fcf_margin_col+1, new_sheetname)
 
     def insert_debt(self):
         var = MyVar()
@@ -263,6 +336,117 @@ class Clipboard:
         self.insert_chart(ws, lt_liabilities_to_assets_col, cash_to_short_term_col + 1,
                           new_sheetname)
 
+    def insert_returns(self):
+        var = MyVar()
+        op_income_col = var.gen_var()
+        tax_col = var.gen_var()
+        net_income_col = var.gen_var()
+        asset_col = var.gen_var()
+        debt_col = var.gen_var()
+        equity_col = var.gen_var()
+        cash_from_investing_col = var.gen_var()
+        cash_from_financing_col = var.gen_var()
+        roe_col = var.gen_var()
+        roa_col = var.gen_var()
+        roic_col = var.gen_var()
+
+        col_tuples = [
+            # Op income
+            {'ref': 9, 'idx': op_income_col, 'text': 'Op income', 'table': 'Income'},
+            # Tax
+            {'ref': 12, 'idx': tax_col, 'text': 'Tax expense', 'table': 'Income'},
+            # Net income
+            {'ref': 17, 'idx': net_income_col, 'text': 'Net income', 'table': 'Income'},
+            # Assets
+            {'ref': 13, 'idx': asset_col, 'text': "Shareholders' equity", 'table': 'Balance'},
+            # Debt
+            {'ref': 15, 'idx': debt_col, 'text': "Debt", 'table': 'Balance'},
+            # Equity
+            {'ref': 23, 'idx': equity_col, 'text': "Equity", 'table': 'Balance'},
+            # Cash from investing
+            {'ref': 19, 'idx': cash_from_investing_col, 'text': "Cash from investing", 'table': 'Cash'},
+            # Cash from financing
+            {'ref': 27, 'idx': cash_from_financing_col, 'text': "Cash from financing", 'table': 'Cash'},
+        ]
+
+        new_sheetname = 'Returns'
+        ws = self.insert_newsheet(new_sheetname, col_tuples)
+
+        ws.cell(column=roe_col, row=1, value='Return on Equity')
+        ws.cell(column=roa_col, row=1, value='Return on Asset')
+        ws.cell(column=roic_col, row=1, value='Return on Invested Capital')
+        for i in range(5, 60):
+            ws.cell(
+                column=roe_col, row=i,
+                value='=SUM(${net_income}{index1}:{net_income}{index2})/AVERAGE(${equity}{index1}:${equity}{index2})'
+                .format(index1=i - 3,
+                        index2=i,
+                        net_income=column_to_letter(net_income_col),
+                        equity=column_to_letter(equity_col)))
+            ws['{}{}'.format(column_to_letter(roe_col), i)].number_format = '0%'
+
+            ws.cell(
+                column=roa_col, row=i,
+                value='=SUM(${net_income}{index1}:{net_income}{index2})/AVERAGE(${asset}{index1}:${asset}{index2})'
+                .format(index1=i - 3,
+                        index2=i,
+                        net_income=column_to_letter(net_income_col),
+                        asset=column_to_letter(asset_col)))
+            ws['{}{}'.format(column_to_letter(roa_col), i)].number_format = '0%'
+
+            ws.cell(
+                column=roic_col, row=i,
+                value='=(SUM(${op_income}{index1}:{op_income}{index2})'
+                      '- SUM(${tax}{index1}:{tax}{index2}))'
+                      '/ (AVERAGE(${debt}{index1}:${debt}{index2})'
+                      '+ AVERAGE(${equity}{index1}:${equity}{index2})'
+                      '+ AVERAGE(${cash_from_investing}{index1}:${cash_from_investing}{index2})'
+                      '+ AVERAGE(${cash_from_financing}{index1}:${cash_from_financing}{index2}))'
+                .format(index1=i - 3,
+                        index2=i,
+                        op_income=column_to_letter(op_income_col),
+                        tax=column_to_letter(tax_col),
+                        debt=column_to_letter(debt_col),
+                        equity=column_to_letter(equity_col),
+                        cash_from_investing=column_to_letter(cash_from_investing_col),
+                        cash_from_financing=column_to_letter(cash_from_financing_col), ))
+            ws['{}{}'.format(column_to_letter(roic_col), i)].number_format = '0%'
+
+        self.insert_chart(ws, roe_col, roic_col + 1, new_sheetname)
+
+    def insert_eps(self):
+        var = MyVar()
+        eps_col = var.gen_var()
+        annual_eps_col = var.gen_var()
+        col_tuples = [
+            # EPS
+            {'ref': 23, 'idx': eps_col, 'text': 'EPS', 'table': 'Income'},
+        ]
+        new_sheetname = 'EPS'
+        ws = self.insert_newsheet(new_sheetname, col_tuples)
+
+        ws.cell(column=annual_eps_col, row=1, value='Annual EPS')
+        for i in range(5, 60):
+            ws.cell(column=annual_eps_col, row=i,
+                    value='=SUM(${eps}{index1}:{eps}{index2})'
+                    .format(index1=i - 3,
+                            index2=i,
+                            eps=column_to_letter(eps_col), ))
+            ws['{}{}'.format(column_to_letter(annual_eps_col), i)].number_format = '0.00'
+
+        self.insert_chart(ws, annual_eps_col, annual_eps_col + 1, new_sheetname)
+
+    def insert_shares_out(self):
+        var = MyVar()
+        shares_out_col = var.gen_var()
+        col_tuples = [
+            # Shares outstanding
+            {'ref': 21, 'idx': shares_out_col, 'text': 'Shares outstanding', 'table': 'Income'},
+        ]
+        new_sheetname = 'Shares'
+        ws = self.insert_newsheet(new_sheetname, col_tuples)
+        self.insert_chart(ws, shares_out_col, shares_out_col + 1, new_sheetname)
+
 
 def old_run_main():
     main_url_path = 'https://www.macrotrends.net/'
@@ -271,26 +455,25 @@ def old_run_main():
     if "stocks" in current_url:
         # Check if the data in the ticker is available
         url_parts = current_url.split("/", 10)
-        url_path = main_url_path+"stocks/charts/"+url_parts[5]+"/"+url_parts[6]+"/"
+        url_path = main_url_path + "stocks/charts/" + url_parts[5] + "/" + url_parts[6] + "/"
         driver = get_driver(get_options())
         # financial-statements
-        fin_url_path = url_path+"financial-statements"
+        fin_url_path = url_path + "financial-statements"
         driver.get(fin_url_path)
         if driver.find_elements(
                 By.CSS_SELECTOR,
                 "div.jqx-grid-column-header:nth-child(1) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)"):
-
             clip = Clipboard()
 
-            income_url = url_path+"income-statement"
+            income_url = url_path + "income-statement"
             data_dict = parse_grid(driver, income_url)
             clip.write_excel('Income', data_dict)
 
-            balance_url = url_path+"balance-sheet"
+            balance_url = url_path + "balance-sheet"
             data_dict = parse_grid(driver, balance_url)
             clip.write_excel('Balance', data_dict)
 
-            cash_url = url_path+"cash-flow-statement"
+            cash_url = url_path + "cash-flow-statement"
             data_dict = parse_grid(driver, cash_url)
             clip.write_excel('Cash', data_dict)
 
@@ -300,11 +483,11 @@ def old_run_main():
 
 def column_to_letter(column_int):
     # https://stackoverflow.com/questions/23861680/convert-spreadsheet-number-to-column-letter
-    start_index = 1   # It can start either at 0 or at 1
+    start_index = 1  # It can start either at 0 or at 1
     letter = ''
     while column_int > 25 + start_index:
-        letter += chr(65 + int((column_int-start_index)/26) - 1)
-        column_int = column_int - (int((column_int-start_index)/26))*26
+        letter += chr(65 + int((column_int - start_index) / 26) - 1)
+        column_int = column_int - (int((column_int - start_index) / 26)) * 26
     letter += chr(65 - start_index + (int(column_int)))
     return letter
 
@@ -314,6 +497,6 @@ def letter_to_column(name):
     pow = 1
     column_int = 0
     for letter in name[::-1]:
-            column_int += (int(letter, 36) -9) * pow
-            pow *= 26
+        column_int += (int(letter, 36) - 9) * pow
+        pow *= 26
     return column_int
